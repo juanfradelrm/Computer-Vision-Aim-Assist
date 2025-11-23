@@ -36,6 +36,6 @@ pip install opencv-python mss numpy pywin32
 ```
 
 ## Authors
-Juan Francisco del Rosario Machín
-Eduardo Gainza Koller
-Mario García Abellán
+1. Juan Francisco del Rosario Machín
+2. Eduardo Gainza Koller
+3. Mario García Abellán
