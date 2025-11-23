@@ -34,3 +34,8 @@ You need Python 3.x installed along with the following libraries:
 ```bash
 pip install opencv-python mss numpy pywin32
 ```
+
+## Authors
+Juan Francisco del Rosario Machín
+Eduardo Gainza Koller
+Mario García Abellán
