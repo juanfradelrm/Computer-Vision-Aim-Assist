@@ -39,8 +39,7 @@ import win32api
 import win32con
 
 def disparar():
-    #win32api.keybd_event(win32con.VK_LMENU, 0, 0, 0)        # Alt izq DOWN (solo para forzar foco)
-    win32api.keybd_event(0x01, 0, 0, 0)                    # Left click DOWN  (0x01 = WM_LBUTTONDOWN)
+    win32api.keybd_event(0x01, 0, 0, 0)                    # Left click DOWN  
     win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
     win32api.keybd_event(win32con.VK_LMENU, 0, win32con.KEYEVENTF_KEYUP, 0)
 
@@ -49,9 +48,6 @@ while True:
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, LOWER_YELLOW, UPPER_YELLOW)
     pixels = cv2.countNonZero(mask)
-
-    h, w = img.shape[:2]
-    #cv2.putText(img, f"Pix: {pixels} | Thr: {PIXEL_THRESHOLD} | {'ON' if shooting else 'OFF'}", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
 
     cv2.imshow("MASK (blanco=dispara)", mask)
     cv2.imshow("CENTRO (pixeles)", img)
