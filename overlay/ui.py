@@ -106,7 +106,8 @@ class UILauncher(ctk.CTk):
 
 
     # Metodo para cargar la UI de parámetros del script seleccionado
-    def load_params_ui(self, event=None):
+    def load_params_ui(self, selected=None):
+        print("Cargando parámetros UI...")
         # Limpiar frame
         for widget in self.params_frame.winfo_children():
             widget.destroy()
@@ -198,10 +199,12 @@ class UILauncher(ctk.CTk):
         logo_label = ctk.CTkLabel(main_frame, image=logo_img, text="")
         logo_label.pack(pady=(0, 40))
         # Selector de scripts
-        self.script_selector = ctk.CTkComboBox(main_frame, values=[])
+        self.script_selector = ctk.CTkComboBox(
+            main_frame,
+            values=[],
+            command=self.load_params_ui
+        )
         self.script_selector.pack(pady=(10,20))
-        # Evento al cambiar selección
-        self.script_selector.bind("<<ComboboxSelected>>", self.load_params_ui)
         # Estado del script
         self.status_label = ctk.CTkLabel(main_frame, text="Inactive", font=("Arial", 14), text_color="#FFFFFF")
         self.status_label.pack(pady=10)
