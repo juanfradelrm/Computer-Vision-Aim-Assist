@@ -209,8 +209,8 @@ class UILauncher(ctk.CTk):
         self.status_label = ctk.CTkLabel(main_frame, text="Inactive", font=("Arial", 14), text_color="#FFFFFF")
         self.status_label.pack(pady=10)
         # Frame para parámetros
-        self.params_frame = ctk.CTkFrame(main_frame, fg_color="#2e2e2e")
-        self.params_frame.pack(padx=100, pady=10, fill="x")
+        self.params_frame = ctk.CTkScrollableFrame(main_frame, fg_color="#2e2e2e", height=int(self.screen_h * 0.4))
+        self.params_frame.pack(padx=100, pady=10, fill="both", expand=False)
         # Boton de inicio del script
         start_btn = ctk.CTkButton(main_frame, text="START", command=self.start_script,
                           fg_color="#28a745", font=("Arial", 18, "bold"))
