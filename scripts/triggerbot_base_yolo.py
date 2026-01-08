@@ -24,8 +24,9 @@ _thread = None
 _metrics = {"fps": 0, "detections": 0, "avg_loop_ms": 0}
 
 def disparar():
-    win32api.keybd_event(0x01, 0, 0, 0)
-    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)
+    print("Disparando (Tecla L)")
+    win32api.keybd_event(0x4C, 0, 0, 0) 
+    win32api.keybd_event(0x4C, 0, win32con.KEYEVENTF_KEYUP, 0)
 
 def loop(config):
     global _metrics, _running
