@@ -7,7 +7,7 @@ import threading
 import win32api
 import win32con
 
-# Metadata
+# configuracion
 NAME = "Triggerbot ORB Density"
 PARAMS = [
     {"key": "roi_size", "type": "int", "default": 128, "min": 64, "max": 256, "label": "ROI Size (px)"},
@@ -21,40 +21,44 @@ PARAMS = [
 _running = False
 _thread = None
 
+# simulamos el click
 def disparar():
     win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
     win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
 
-
+#loop principal
 def loop(config):
+    # configuramos la captura de pantalla
     sct = mss.mss()
     monitor_full = sct.monitors[1]
-    img_temp = np.array(sct.grab(monitor_full))
-    screen_w, screen_h = img_temp.shape[1], img_temp.shape[0]
+    img_temp = np.array(sct.grab(monitor_full)) # captura de pantalla para obtener dimensiones
+    screen_w, screen_h = img_temp.shape[1], img_temp.shape[0]   # tamano pantalla
 
+    # configuramos la roi en el centro
     size = int(config.get("roi_size", 128))
     monitor = {"top": (screen_h-size)//2, "left": (screen_w-size)//2, 
                "width": size, "height": size}
 
-    n_features = int(config.get("orb_features", 100))
+    # configuramos el detector ORB (Oriented FAST and Rotated BRIEF)
+    # combina detector de esquinas FAST y BRIEF descriptor
+    n_features = int(config.get("orb_features", 100))   # maximo de features a detectar
     orb = cv2.ORB_create(nfeatures=n_features, scoreType=cv2.ORB_HARRIS_SCORE)
+    # scoreType: HARRIS_SCORE usa el algoritmo Harris para rankear features
     
     keypoint_thresh = int(config.get("keypoint_threshold", 15))
     show_debug = config.get("debug_window", False)
 
-    last_time = time.time()
-    frames = 0
-
+    # configuracion ventana debug
     if show_debug:
         cv2.namedWindow("Debug ORB View", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Debug ORB View", 256, 256)
 
     try:
         while _running:
-            start = time.time()
-            img = np.array(sct.grab(monitor))
+            img = np.array(sct.grab(monitor))   # captura la roi
             if img is None: continue
 
+            # pasamos imagen a gris
             frame = img[:, :, :3]
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -64,19 +68,20 @@ def loop(config):
             trigger = False
             cx_center = size // 2
             cy_center = size // 2
-            proximity_thresh = size * 0.3
+            proximity_thresh = size * 0.3    # Radio del 30% del tamaño de ROI
             
             # Contar keypoints centrales
             central_keypoints_list = []
             outer_keypoints_list = []
 
             for kp in keypoints:
-                kx, ky = kp.pt
+                kx, ky = kp.pt  # coordenadas del keypoint
+                # calcular distancia al centro
                 dist = ((kx - cx_center)**2 + (ky - cy_center)**2)**0.5
                 if dist <= proximity_thresh:
-                    central_keypoints_list.append(kp)
+                    central_keypoints_list.append(kp)   # keypoint central
                 else:
-                    outer_keypoints_list.append(kp)
+                    outer_keypoints_list.append(kp)  # keypoint lejano
             
             count_central = len(central_keypoints_list)
             
@@ -84,18 +89,17 @@ def loop(config):
             if len(keypoints) >= keypoint_thresh and count_central >= (keypoint_thresh // 2):
                 trigger = True
 
-            # --- DEBUG VISUALIZACIÓN ---
+            # PARA DEBUG VISUALIZACIÓN
             if show_debug:
                 debug_frame = frame.copy()
                 
                 # Dibujar zona letal (círculo azul)
                 cv2.circle(debug_frame, (cx_center, cy_center), int(proximity_thresh), (255, 255, 0), 1)
                 
-                # Dibujar keypoints LEJOS (rojos pequeños)
+                # Dibujar keypoints lejos (rojos pequeños)
                 cv2.drawKeypoints(debug_frame, outer_keypoints_list, debug_frame, color=(0, 0, 255), flags=0)
                 
-                # Dibujar keypoints CENTRALES (verdes grandes) que causan el disparo
-                # flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS dibuja el tamaño del keypoint
+                # Dibujar keypoints CENTRALES (verdes grandes)
                 cv2.drawKeypoints(debug_frame, central_keypoints_list, debug_frame, color=(0, 255, 0), flags=0)
 
                 # Texto de estado
@@ -108,13 +112,10 @@ def loop(config):
 
                 cv2.imshow("Debug ORB View", debug_frame)
                 cv2.waitKey(1)
-            # ---------------------------
 
             if trigger:
                 disparar()
-                time.sleep(random.uniform(0.05, 0.12))
-
-            
+                time.sleep(random.uniform(0.05, 0.12))  # retraso aleatorio para evitar multiples disparos
 
     finally:
         if show_debug:
