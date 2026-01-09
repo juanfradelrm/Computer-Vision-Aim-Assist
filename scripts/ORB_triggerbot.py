@@ -7,120 +7,117 @@ import threading
 import win32api
 import win32con
 
-# configuracion
+# Configuración
 NAME = "Triggerbot ORB Density"
 PARAMS = [
     {"key": "roi_size", "type": "int", "default": 128, "min": 64, "max": 256, "label": "ROI Size (px)"},
     {"key": "orb_features", "type": "int", "default": 100, "min": 50, "max": 500, "label": "Max ORB Features"},
     {"key": "keypoint_threshold", "type": "int", "default": 65, "min": 30, "max": 100, "label": "Min Keypoints to Shoot"},
     {"key": "debug_window", "type": "bool", "default": False, "label": "Show Debug Window"},
-    
 ]
 
-# Internal state
+# --- [STATS] Diccionario de métricas universales ---
 _running = False
 _thread = None
+_metrics = {
+    "fps": 0, 
+    "status": "Idle", 
+    "avg_loop_ms": 0, 
+    "detections": 0,
+    "target_stability": 0 
+}
 
-# simulamos el click
 def disparar():
-    win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
-    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
+    win32api.keybd_event(0x01, 0, 0, 0)
+    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)
 
-#loop principal
 def loop(config):
-    # configuramos la captura de pantalla
+    global _metrics, _running
     sct = mss.mss()
     monitor_full = sct.monitors[1]
-    img_temp = np.array(sct.grab(monitor_full)) # captura de pantalla para obtener dimensiones
-    screen_w, screen_h = img_temp.shape[1], img_temp.shape[0]   # tamano pantalla
+    
+    # Captura inicial para dimensiones
+    img_temp = np.array(sct.grab(monitor_full)) 
+    screen_w, screen_h = img_temp.shape[1], img_temp.shape[0]
 
-    # configuramos la roi en el centro
     size = int(config.get("roi_size", 128))
     monitor = {"top": (screen_h-size)//2, "left": (screen_w-size)//2, 
                "width": size, "height": size}
 
-    # configuramos el detector ORB (Oriented FAST and Rotated BRIEF)
-    # combina detector de esquinas FAST y BRIEF descriptor
-    n_features = int(config.get("orb_features", 100))   # maximo de features a detectar
+    n_features = int(config.get("orb_features", 100))
     orb = cv2.ORB_create(nfeatures=n_features, scoreType=cv2.ORB_HARRIS_SCORE)
-    # scoreType: HARRIS_SCORE usa el algoritmo Harris para rankear features
     
     keypoint_thresh = int(config.get("keypoint_threshold", 15))
     show_debug = config.get("debug_window", False)
 
-    # configuracion ventana debug
+    # --- [STATS] Variables de control ---
+    last_time = time.time()
+    frames = 0
+    detecciones_acumuladas = 0
+    kp_counts_history = [] # Para medir estabilidad de la detección
+
     if show_debug:
         cv2.namedWindow("Debug ORB View", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Debug ORB View", 256, 256)
 
     try:
         while _running:
-            img = np.array(sct.grab(monitor))   # captura la roi
+            start_ciclo = time.time() # [STATS] Inicio medida latencia
+            
+            img = np.array(sct.grab(monitor))
             if img is None: continue
 
-            # pasamos imagen a gris
             frame = img[:, :, :3]
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Detectar keypoints
+            # Inferencia ORB
             keypoints = orb.detect(gray, None)
+            kp_counts_history.append(len(keypoints))
             
             trigger = False
-            cx_center = size // 2
-            cy_center = size // 2
-            proximity_thresh = size * 0.3    # Radio del 30% del tamaño de ROI
+            cx_center, cy_center = size // 2, size // 2
+            proximity_thresh = size * 0.3
             
-            # Contar keypoints centrales
-            central_keypoints_list = []
-            outer_keypoints_list = []
-
-            for kp in keypoints:
-                kx, ky = kp.pt  # coordenadas del keypoint
-                # calcular distancia al centro
-                dist = ((kx - cx_center)**2 + (ky - cy_center)**2)**0.5
-                if dist <= proximity_thresh:
-                    central_keypoints_list.append(kp)   # keypoint central
-                else:
-                    outer_keypoints_list.append(kp)  # keypoint lejano
+            central_keypoints = [kp for kp in keypoints if np.linalg.norm(np.array(kp.pt) - [cx_center, cy_center]) <= proximity_thresh]
+            count_central = len(central_keypoints)
             
-            count_central = len(central_keypoints_list)
-            
-            # Condición de disparo: suficientes puntos totales Y suficientes en el centro
             if len(keypoints) >= keypoint_thresh and count_central >= (keypoint_thresh // 2):
                 trigger = True
 
-            # PARA DEBUG VISUALIZACIÓN
+            if trigger:
+                disparar()
+                detecciones_acumuladas += 1
+                _metrics["status"] = "Firing!"
+                time.sleep(random.uniform(0.05, 0.12))
+            else:
+                _metrics["status"] = "Scanning..."
+
+            # Visualización Debug
             if show_debug:
-                debug_frame = frame.copy()
-                
-                # Dibujar zona letal (círculo azul)
-                cv2.circle(debug_frame, (cx_center, cy_center), int(proximity_thresh), (255, 255, 0), 1)
-                
-                # Dibujar keypoints lejos (rojos pequeños)
-                cv2.drawKeypoints(debug_frame, outer_keypoints_list, debug_frame, color=(0, 0, 255), flags=0)
-                
-                # Dibujar keypoints CENTRALES (verdes grandes)
-                cv2.drawKeypoints(debug_frame, central_keypoints_list, debug_frame, color=(0, 255, 0), flags=0)
-
-                # Texto de estado
-                status_text = f"KP: {count_central}/{len(keypoints)}" 
-                trigger_text = "SHOOT!" if trigger else "SCANNING"
-                color_text = (0, 255, 0) if trigger else (200, 200, 200)
-                
-                cv2.putText(debug_frame, status_text, (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                cv2.putText(debug_frame, trigger_text, (5, size - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_text, 1)
-
+                debug_frame = cv2.drawKeypoints(frame, keypoints, None, color=(0, 255, 0))
                 cv2.imshow("Debug ORB View", debug_frame)
                 cv2.waitKey(1)
 
-            if trigger:
-                disparar()
-                time.sleep(random.uniform(0.05, 0.12))  # retraso aleatorio para evitar multiples disparos
+            # --- [STATS] Actualización de métricas ---
+            frames += 1
+            curr_time = time.time()
+            if (curr_time - last_time) >= 1.0:
+                _metrics["fps"] = frames
+                _metrics["avg_loop_ms"] = round((time.time() - start_ciclo) * 1000, 2)
+                _metrics["detections"] = detecciones_acumuladas
+                
+                # Estabilidad: Desviación estándar del número de puntos encontrados
+                # Si la desviación es alta, la detección es "ruidosa" o inestable
+                if len(kp_counts_history) > 1:
+                    _metrics["target_stability"] = round(np.std(kp_counts_history), 2)
+                
+                # Reset
+                frames = 0
+                detecciones_acumuladas = 0
+                kp_counts_history = []
+                last_time = curr_time
 
     finally:
-        if show_debug:
-            cv2.destroyAllWindows()
-
+        if show_debug: cv2.destroyAllWindows()
 
 def start(config: dict):
     global _running, _thread
@@ -129,7 +126,6 @@ def start(config: dict):
     _thread = threading.Thread(target=loop, args=(config,), daemon=True)
     _thread.start()
 
-
 def stop():
     global _running, _thread
     _running = False
@@ -137,5 +133,5 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
-
-
+def get_metrics() -> dict:
+    return _metrics

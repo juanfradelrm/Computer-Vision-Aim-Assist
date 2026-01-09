@@ -1,0 +1,6 @@
+avg_fps,avg_latency,total_detections,efficiency_score,script,fecha
+142.76,35.87,186,123.3724,Triggerbot Color Threshold,2026-01-09 22:07
+151.86,28.74,61,75.7106,Triggerbot ORB Density,2026-01-09 22:15
+134.57,29.9,132,125.9975,Triggerbot ORB Density,2026-01-09 22:24
+201.89,4.4,0,0.0,Triggerbot ORB Density,2026-01-09 22:27
+9.18,166.65,43,7.8173,Triggerbot YOLO Base,2026-01-09 22:37

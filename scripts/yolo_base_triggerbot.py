@@ -13,36 +13,39 @@ PARAMS = [
     {"key": "confidence", "type": "str", "default": "0.5", "label": "Confidence (0.1-0.9)"},
     {"key": "target_id", "type": "int", "default": 0, "label": "Class ID (0=person)"},
     {"key": "use_filters", "type": "bool", "default": True, "label": "Enable CV Filters"},
-    
 ]
 
+# --- [STATS] Diccionario de métricas ---
 _running = False
 _thread = None
+_metrics = {
+    "fps": 0, 
+    "status": "Idle", 
+    "avg_loop_ms": 0, 
+    "detections": 0,
+    "target_stability": 0 
+}
 
-# simular click para disparar
 def disparar():
-    win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
-    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
+    win32api.keybd_event(0x01, 0, 0, 0)
+    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)
 
-# LOOP PRINCIPAL
 def loop(config):
-    global _running
+    global _running, _metrics
     
-    # obtener parametros
     conf_threshold = float(config.get("confidence", 0.5))
-    model_path = "yolov8n.pt"
+    model_path = "yolov8n.pt" # Puedes cambiar a yolov11n.pt
     size = config["roi_size"]
-    target_class = config["target_id"] # clase objetivo para disparar
+    target_class = config["target_id"]
 
-    # cargar el modelo YOLO
     try:
+        # Cargar en GPU si está disponible para mejorar la métrica de latencia
         model = YOLO(model_path)
     except Exception as e:
         print(f"Error: {e}")
         _running = False
         return
 
-    # configuración de la captura de pantalla
     sct = mss.mss()
     monitor_full = sct.monitors[1]
     monitor = {
@@ -50,53 +53,75 @@ def loop(config):
         "left": (monitor_full["width"] - size) // 2,
         "width": size,
         "height": size
-    }   # calcular ROI centrada
+    }
 
-    crosshair_pos = size // 2   # centro para la mira
+    crosshair_pos = size // 2
     
-    # CONFIGURACION DE FILTROS
-    # kernel y filtro para realzar bordes y que el modelo funcione mejor
-    sharpen_kernel = np.array([[-1,-1,-1], 
-                               [-1, 9,-1], 
-                               [-1,-1,-1]]) # resta los bordes y multiplica el centro por 9
+    # Pre-cálculo de filtros
+    sharpen_kernel = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
 
-    while _running:
-        # capturar la region de interes
-        img = np.array(sct.grab(monitor))
-        img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    # --- [STATS] Variables de control ---
+    last_time = time.time()
+    frames = 0
+    detecciones_acumuladas = 0
+    conf_scores_history = []
 
-        # si se selecciona, aplicar filtros
+    while _running:
+        start_ciclo = time.time() # [STATS] Inicio medida latencia
+        
+        img_raw = np.array(sct.grab(monitor))
+        img = cv2.cvtColor(img_raw, cv2.COLOR_BGRA2BGR)
+
         if config.get("use_filters", True):
-           # Convierte a LAB y aplica CLAHE solo al canal de luminancia
             lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
             l_enhanced = clahe.apply(l)
             img = cv2.merge((l_enhanced, a, b))
             img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
-            
-            # sharpen para realzar detalles
             img = cv2.filter2D(img, -1, sharpen_kernel)
 
-        # hacemos la predicción con el modelo
-        results = model.predict(img, conf=conf_threshold, verbose=False, imgsz=size, device='cpu')
+        # Inferencia
+        results = model.predict(img, conf=conf_threshold, verbose=False, imgsz=size)
 
-        # DETECCION Y DISPARO
         shot_fired = False
+        _metrics["status"] = "Scanning..."
+        
         for r in results:
             for box in r.boxes:
-                # verficar si la clase detectada es la objetivo
                 if int(box.cls) == target_class:
-                    b = box.xyxy[0].cpu().numpy()   # obtener coordenadas de la caja
+                    conf = float(box.conf[0])
+                    conf_scores_history.append(conf) # [STATS] Guardar confianza
                     
-                    # comprueba si la mira esta sobre la caja
+                    b = box.xyxy[0].cpu().numpy()
+                    
                     if b[0] <= crosshair_pos <= b[2] and b[1] <= crosshair_pos <= b[3]:
                         disparar()
+                        detecciones_acumuladas += 1
+                        _metrics["status"] = "Firing!"
                         shot_fired = True
                         time.sleep(0.05)
                         break
-            if shot_fired: break  
-        
+            if shot_fired: break
+
+        # --- [STATS] Actualización ---
+        frames += 1
+        curr_time = time.time()
+        if (curr_time - last_time) >= 1.0:
+            _metrics["fps"] = frames
+            # La latencia en YOLO incluye Captura + Filtros + Inferencia
+            _metrics["avg_loop_ms"] = round((time.time() - start_ciclo) * 1000, 2)
+            _metrics["detections"] = detecciones_acumuladas
+            
+            # Estabilidad basada en la desviación de la confianza
+            # Un valor bajo significa que el modelo está muy seguro de lo que ve
+            if len(conf_scores_history) > 1:
+                _metrics["target_stability"] = round(np.std(conf_scores_history) * 100, 2)
+            
+            frames = 0
+            detecciones_acumuladas = 0
+            conf_scores_history = []
+            last_time = curr_time
 
 def start(config: dict):
     global _running, _thread
@@ -112,3 +137,5 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
+def get_metrics() -> dict:
+    return _metrics

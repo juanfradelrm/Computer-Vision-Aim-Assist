@@ -13,26 +13,30 @@ PARAMS = [
     {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "ROI Size"},
     {"key": "confidence", "type": "str", "default": "0.5", "label": "Confidence (0.1-0.9)"},
     {"key": "use_filters", "type": "bool", "default": True, "label": "Enable CV Filters"},
-    
 ]
 
+# --- [STATS] Diccionario de métricas universales ---
 _running = False
 _thread = None
+_metrics = {
+    "fps": 0, 
+    "status": "Idle", 
+    "avg_loop_ms": 0, 
+    "detections": 0,
+    "target_stability": 0 
+}
 
-# simular click para disparar
 def disparar():
-     win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
-     win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
+     win32api.keybd_event(0x01, 0, 0, 0)
+     win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)
 
-# LOOP PRINCIPAL
 def loop(config):
-    global _running
+    global _running, _metrics
     
     conf_threshold = float(config.get("confidence", 0.5))
-    model_path = "best.pt"  # cargar el modelo entrenado
+    model_path = "best.pt"
     size = config["roi_size"]
 
-    # cargamos el modelo entrenado
     try:
         model = YOLO(model_path)
     except Exception as e:
@@ -40,68 +44,91 @@ def loop(config):
         _running = False
         return
 
-    # configuración de la captura de pantalla
     sct = mss.mss()
-    monitor_full = sct.monitors[1]  # monitor principal
+    monitor_full = sct.monitors[1]
     monitor = {
         "top": (monitor_full["height"] - size) // 2,
         "left": (monitor_full["width"] - size) // 2,
         "width": size,
         "height": size
-    }   # calcular ROI centrada
+    }
 
-    crosshair_pos = size // 2   # centro para la mira
-    
-    # CONFIGURACION DE FILTROS
-    # kernel y filtro para realzar bordes y que el modelo funcione mejor
-    sharpen_kernel = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]]) # resta los bordes y multiplica el centro por 9
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))  # mejora el contraste localmente
+    crosshair_pos = size // 2
+    sharpen_kernel = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+
+    # --- [STATS] Variables de control de rendimiento ---
+    last_time = time.time()
+    frames = 0
+    detecciones_acumuladas = 0
+    conf_scores_history = [] # Para medir estabilidad de confianza en cabeza
 
     while _running:
-        # capturar la roi de la pantalla
+        start_ciclo = time.time() # [STATS] Medición latencia
+        
         img = np.array(sct.grab(monitor))
         img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
 
-        # si se activa, usamos filtros
         if config.get("use_filters", True):
-            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # pasa de BGR a LAB para separar luminosidad de color
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
-
-            # aplicar CLAHE solo en el canal de luminosidad para mejorar contraste sin alterar colores
             l_enhanced = clahe.apply(l)
             img = cv2.merge((l_enhanced, a, b))
             img = cv2.cvtColor(img, cv2.COLOR_LAB2BGR)
-            img = cv2.filter2D(img, -1, sharpen_kernel) # filtro para realzar detalles
+            img = cv2.filter2D(img, -1, sharpen_kernel)
 
-        # hacemos la prediccion con el modelo
+        # Predicción
         results = model.predict(img, conf=conf_threshold, verbose=False, imgsz=size)
 
         kill_detected = False
         shot_fired = False
+        _metrics["status"] = "Scanning..."
 
-        # si detecta una kill, detiene el disparo
         for r in results:
+            # Primero chequear si hay kill confirmada (Clase 1)
             for box in r.boxes:
-                if int(box.cls) == 1:   # clase 1 = kill confirmada, clase = 0 cabeza
+                if int(box.cls) == 1:
                     kill_detected = True
+                    _metrics["status"] = "Kill Confirmed!"
                     break
             
             if kill_detected: break
 
-            # si no hay kill, buscamos headshots
+            # Buscar cabezas (Clase 0)
             for box in r.boxes:
                 if int(box.cls) == 0: 
+                    conf = float(box.conf[0])
+                    conf_scores_history.append(conf) # [STATS]
+                    
                     b = box.xyxy[0].cpu().numpy()
                     
-                    # comprobar si la caja está centrada en la mira
                     if b[0] <= crosshair_pos <= b[2] and b[1] <= crosshair_pos <= b[3]:
                         disparar()
+                        detecciones_acumuladas += 1
+                        _metrics["status"] = "Firing (HEAD)!"
                         shot_fired = True
-                        time.sleep(0.05)    # delay postdisparo
+                        time.sleep(0.05)
                         break
             
             if shot_fired: break
-        
+
+        # --- [STATS] Actualización de métricas cada segundo ---
+        frames += 1
+        curr_time = time.time()
+        if (curr_time - last_time) >= 1.0:
+            _metrics["fps"] = frames
+            _metrics["avg_loop_ms"] = round((time.time() - start_ciclo) * 1000, 2)
+            _metrics["detections"] = detecciones_acumuladas
+            
+            # Estabilidad: Variación de confianza en la detección de cabeza
+            if len(conf_scores_history) > 1:
+                _metrics["target_stability"] = round(np.std(conf_scores_history) * 100, 2)
+            
+            # Reset
+            frames = 0
+            detecciones_acumuladas = 0
+            conf_scores_history = []
+            last_time = curr_time
 
 def start(config: dict):
     global _running, _thread
@@ -117,3 +144,5 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
+def get_metrics() -> dict:
+    return _metrics
