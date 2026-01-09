@@ -8,27 +8,24 @@ import win32api
 import win32con
 
 # Metadata obligatoria
-NAME = "Triggerbot color"
-DESCRIPTION = "Detecta color en el centro de la pantalla y dispara automáticamente."
+NAME = "Triggerbot Color Threshold"
 PARAMS = [
     {"key": "roi_size", "type": "int", "default": 16, "min": 8, "max": 64, "label": "ROI Size (px)"},
     {"key": "lower_h", "type": "int", "default": 20, "min": 0, "max": 179, "label": "Lower Hue"},
     {"key": "upper_h", "type": "int", "default": 40, "min": 0, "max": 179, "label": "Upper Hue"},
     {"key": "pixel_threshold", "type": "int", "default": 25, "min": 5, "max": 200, "label": "Pixel Threshold"},
-    {"key": "enabled", "type": "bool", "default": True, "label": "Enable Shooting"}
+    
 ]
 
 # Variables internas
 _running = False
 _thread = None
-_metrics = {"fps": 0, "detections": 0, "avg_loop_ms": 0}
 
 def disparar():
     win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
     win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
 
 def loop(config):
-    global _metrics
     sct = mss.mss()
     monitor_full = sct.monitors[1]
     img_temp = np.array(sct.grab(monitor_full))
@@ -44,7 +41,6 @@ def loop(config):
 
     last_time = time.time()
     frames = 0
-    detections = 0
 
     while _running:
         start = time.time()
@@ -53,25 +49,11 @@ def loop(config):
         mask = cv2.inRange(hsv, lower, upper)
         pixels = cv2.countNonZero(mask)
 
-        if pixels > threshold and config["enabled"]:
+        if pixels > threshold:
             disparar()
-            detections += 1
             time.sleep(random.uniform(0.05, 0.1))
 
         frames += 1
-        elapsed = time.time() - last_time
-        if elapsed >= 1.0:
-            _metrics = {
-                "fps": frames,
-                "detections": detections,
-                "avg_loop_ms": round((elapsed/frames)*1000, 2)
-            }
-            frames = 0
-            detections = 0
-            last_time = time.time()
-
-        loop_ms = (time.time() - start) * 1000
-        _metrics["avg_loop_ms"] = loop_ms
 
 def start(config: dict):
     global _running, _thread
@@ -87,5 +69,3 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
-def get_metrics() -> dict:
-    return _metrics

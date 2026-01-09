@@ -164,9 +164,6 @@ class UILauncher(ctk.CTk):
         def run():
             script.start(config)
             while self.running:
-                if hasattr(script, "get_metrics"):
-                    metrics = script.get_metrics()
-                    self.metrics_label.configure(text=f"Metrics: {metrics}")
                 time.sleep(0.5)
         # Iniciar hilo
         self.script_thread = threading.Thread(target=run, daemon=True)
@@ -219,6 +216,4 @@ class UILauncher(ctk.CTk):
         stop_btn = ctk.CTkButton(main_frame, text="STOP", command=self.stop_script,
                          fg_color="#dc3545", font=("Arial", 18, "bold"))
         stop_btn.pack(pady=10)
-        # Métricas en vivo
-        self.metrics_label = ctk.CTkLabel(main_frame, text="Metrics: -", font=("Arial", 12), text_color="#AAAAAA")
-        self.metrics_label.pack(pady=10)
+        # Métricas eliminadas de la UI

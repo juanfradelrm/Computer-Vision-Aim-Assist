@@ -8,32 +8,28 @@ import win32con
 from ultralytics import YOLO
 
 
-NAME = "YOLO_triggerbot"
-DESCRIPTION = "Triggerbot optimizado con filtros de contraste."
+NAME = "Triggerbot YOLO Base"
 PARAMS = [
-    {"key": "model_name", "type": "str", "default": "yolov8n.pt", "label": "Modelo (.pt)"},
-    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "Tamaño ROI"},
-    {"key": "confidence", "type": "str", "default": "0.5", "label": "Confianza (0.1-0.9)"},
-    {"key": "target_id", "type": "int", "default": 0, "label": "ID Clase (0=persona)"},
-    {"key": "use_filters", "type": "bool", "default": True, "label": "Activar Filtros CV"},
-    {"key": "enabled", "type": "bool", "default": True, "label": "Disparo Activo"}
+    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "ROI Size"},
+    {"key": "confidence", "type": "str", "default": "0.5", "label": "Confidence (0.1-0.9)"},
+    {"key": "target_id", "type": "int", "default": 0, "label": "Class ID (0=person)"},
+    {"key": "use_filters", "type": "bool", "default": True, "label": "Enable CV Filters"},
+    
 ]
 
 _running = False
 _thread = None
-_metrics = {"fps": 0, "detections": 0, "avg_loop_ms": 0}
 
 def disparar():
-    print("Disparando (Tecla L)")
-    win32api.keybd_event(0x4C, 0, 0, 0) 
-    win32api.keybd_event(0x4C, 0, win32con.KEYEVENTF_KEYUP, 0)
+    win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
+    win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
 
 def loop(config):
-    global _metrics, _running
+    global _running
     
     
     conf_threshold = float(config.get("confidence", 0.5))
-    model_path = config.get("model_name", "yolov8n.pt")
+    model_path = "yolov8n.pt"
     size = config["roi_size"]
     target_class = config["target_id"]
 
@@ -94,22 +90,14 @@ def loop(config):
                     b = box.xyxy[0].cpu().numpy()
                     
                     if b[0] <= crosshair_pos <= b[2] and b[1] <= crosshair_pos <= b[3]:
-                        if config["enabled"]:
-                            disparar()
-                            shot_fired = True
-                            
-                            time.sleep(0.05) 
-                            break
+                        disparar()
+                        shot_fired = True
+                        time.sleep(0.05)
+                        break
             if shot_fired: break
 
         
-        frames += 1
-        curr_time = time.time()
-        if (curr_time - last_time) >= 1.0:
-            _metrics["fps"] = frames
-            _metrics["avg_loop_ms"] = round((curr_time - start_time) * 1000, 2)
-            frames = 0
-            last_time = curr_time
+        
 
 def start(config: dict):
     global _running, _thread
@@ -125,5 +113,3 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
-def get_metrics() -> dict:
-    return _metrics

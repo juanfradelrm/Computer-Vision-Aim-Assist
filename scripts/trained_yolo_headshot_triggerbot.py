@@ -7,30 +7,26 @@ import win32api
 import win32con
 from ultralytics import YOLO
 
-NAME = "YOLO11 Triggerbot"
-DESCRIPTION = "Triggerbot híbrido con lógica de Kill-check y filtros de imagen."
+NAME = "Triggerbot Trained YOLO Headshot"
 PARAMS = [
-    {"key": "model_name", "type": "str", "default": "best.pt", "label": "Modelo (.pt)"},
-    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "Tamaño ROI"},
-    {"key": "confidence", "type": "str", "default": "0.5", "label": "Confianza (0.1-0.9)"},
-    {"key": "use_filters", "type": "bool", "default": True, "label": "Activar Filtros CV"},
-    {"key": "enabled", "type": "bool", "default": True, "label": "Disparo Activo"}
+    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "ROI Size"},
+    {"key": "confidence", "type": "str", "default": "0.5", "label": "Confidence (0.1-0.9)"},
+    {"key": "use_filters", "type": "bool", "default": True, "label": "Enable CV Filters"},
+    
 ]
 
 _running = False
 _thread = None
-_metrics = {"fps": 0, "status": "Idle", "avg_loop_ms": 0}
 
 def disparar():
      win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
      win32api.keybd_event(0x01, 0, win32con.KEYEVENTF_KEYUP, 0)  # Left click UP
-     print("Disparo!")
 
 def loop(config):
-    global _metrics, _running
+    global _running
     
     conf_threshold = float(config.get("confidence", 0.5))
-    model_path = config.get("model_name", "best.pt")
+    model_path = "best.pt"
     size = config["roi_size"]
 
     try:
@@ -83,7 +79,6 @@ def loop(config):
             for box in r.boxes:
                 if int(box.cls) == 1:
                     kill_detected = True
-                    _metrics["status"] = "Kill Detected"
                     break
             
             if kill_detected: break
@@ -95,26 +90,14 @@ def loop(config):
                     
                     
                     if b[0] <= crosshair_pos <= b[2] and b[1] <= crosshair_pos <= b[3]:
-                        if config["enabled"]:
-                            disparar()
-                            shot_fired = True
-                            _metrics["status"] = "Firing!"
-                            time.sleep(0.05) 
-                            break
+                        disparar()
+                        shot_fired = True
+                        time.sleep(0.05)
+                        break
             
             if shot_fired: break
         
-        if not shot_fired and not kill_detected:
-            _metrics["status"] = "Searching..."
-
         
-        frames += 1
-        curr_time = time.time()
-        if (curr_time - last_time) >= 1.0:
-            _metrics["fps"] = frames
-            _metrics["avg_loop_ms"] = round((curr_time - start_time) * 1000, 2)
-            frames = 0
-            last_time = curr_time
 
 def start(config: dict):
     global _running, _thread
@@ -130,5 +113,3 @@ def stop():
         _thread.join(timeout=2)
         _thread = None
 
-def get_metrics() -> dict:
-    return _metrics

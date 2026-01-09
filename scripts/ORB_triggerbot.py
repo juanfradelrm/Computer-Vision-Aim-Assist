@@ -9,19 +9,17 @@ import win32con
 
 # Metadata
 NAME = "Triggerbot ORB Density"
-DESCRIPTION = "Detecta enemigos usando características ORB (Oriented FAST and Rotated BRIEF) comparando keypoints en la ROI central."
 PARAMS = [
     {"key": "roi_size", "type": "int", "default": 128, "min": 64, "max": 256, "label": "ROI Size (px)"},
     {"key": "orb_features", "type": "int", "default": 100, "min": 50, "max": 500, "label": "Max ORB Features"},
     {"key": "keypoint_threshold", "type": "int", "default": 65, "min": 30, "max": 100, "label": "Min Keypoints to Shoot"},
     {"key": "debug_window", "type": "bool", "default": False, "label": "Show Debug Window"},
-    {"key": "enabled", "type": "bool", "default": True, "label": "Enable Shooting"}
+    
 ]
 
 # Internal state
 _running = False
 _thread = None
-_metrics = {"fps": 0, "detections": 0, "avg_loop_ms": 0, "keypoints": 0}
 
 def disparar():
     win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
@@ -29,7 +27,6 @@ def disparar():
 
 
 def loop(config):
-    global _metrics
     sct = mss.mss()
     monitor_full = sct.monitors[1]
     img_temp = np.array(sct.grab(monitor_full))
@@ -47,7 +44,6 @@ def loop(config):
 
     last_time = time.time()
     frames = 0
-    detections = 0
 
     if show_debug:
         cv2.namedWindow("Debug ORB View", cv2.WINDOW_NORMAL)
@@ -114,24 +110,11 @@ def loop(config):
                 cv2.waitKey(1)
             # ---------------------------
 
-            if trigger and config.get("enabled", True):
+            if trigger:
                 disparar()
-                detections += 1
                 time.sleep(random.uniform(0.05, 0.12))
 
-            # Métricas
-            frames += 1
-            elapsed = time.time() - last_time
-            if elapsed >= 1.0:
-                _metrics = {
-                    "fps": frames,
-                    "detections": detections,
-                    "avg_loop_ms": round(((time.time() - start) * 1000), 2),
-                    "keypoints": len(keypoints)
-                }
-                frames = 0
-                detections = 0
-                last_time = time.time()
+            
 
     finally:
         if show_debug:
@@ -154,5 +137,4 @@ def stop():
         _thread = None
 
 
-def get_metrics() -> dict:
-    return _metrics
+

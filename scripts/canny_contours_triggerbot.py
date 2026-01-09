@@ -8,21 +8,19 @@ import win32api
 import win32con
 
 # Metadata
-NAME = "Triggerbot edges"
-DESCRIPTION = "Detecta bordes en la ROI central usando Canny y dispara cuando aparece una silueta significativa."
+NAME = "Triggerbot Canny Contours"
 PARAMS = [
     {"key": "roi_size", "type": "int", "default": 64, "min": 16, "max": 256, "label": "ROI Size (px)"},
     {"key": "canny_t1", "type": "int", "default": 50, "min": 1, "max": 500, "label": "Canny Threshold1"},
     {"key": "canny_t2", "type": "int", "default": 150, "min": 1, "max": 500, "label": "Canny Threshold2"},
     {"key": "blur_ksize", "type": "int", "default": 5, "min": 1, "max": 31, "label": "Gaussian Blur Kernel (odd)"},
     {"key": "min_contour_area", "type": "int", "default": 200, "min": 10, "max": 10000, "label": "Min Contour Area"},
-    {"key": "enabled", "type": "bool", "default": True, "label": "Enable Shooting"}
+    
 ]
 
 # Internal state
 _running = False
 _thread = None
-_metrics = {"fps": 0, "detections": 0, "avg_loop_ms": 0}
 
 def disparar():
     win32api.keybd_event(0x01, 0, 0, 0)   # Left click DOWN
@@ -35,7 +33,6 @@ def _ensure_odd(x):
 
 
 def loop(config):
-    global _metrics
     sct = mss.mss()
     monitor_full = sct.monitors[1]
     img_temp = np.array(sct.grab(monitor_full))
@@ -90,25 +87,12 @@ def loop(config):
                 trigger = True
                 break
 
-        if trigger and config.get("enabled", True):
+        if trigger:
             disparar()
             detections += 1
             time.sleep(random.uniform(0.05, 0.12))
 
         frames += 1
-        elapsed = time.time() - last_time
-        if elapsed >= 1.0:
-            _metrics = {
-                "fps": frames,
-                "detections": detections,
-                "avg_loop_ms": round((elapsed/frames)*1000, 2)
-            }
-            frames = 0
-            detections = 0
-            last_time = time.time()
-
-        loop_ms = (time.time() - start) * 1000
-        _metrics["avg_loop_ms"] = loop_ms
 
 
 def start(config: dict):
@@ -128,5 +112,4 @@ def stop():
         _thread = None
 
 
-def get_metrics() -> dict:
-    return _metrics
+

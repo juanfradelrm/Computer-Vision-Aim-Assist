@@ -9,19 +9,16 @@ import tkinter as tk
 from ultralytics import YOLO
 
 
-NAME = "YOLO + KCF Hybrid Aimbot"
-DESCRIPTION = "Detección con YOLO y seguimiento ultra rápido con KCF + Kalman."
+NAME = "Aimbot YOLO + KCF Hybrid"
 PARAMS = [
-    {"key": "model_name", "type": "str", "default": "yolov8n.pt", "label": "Modelo (.pt)"},
-    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "Tamaño ROI"},
-    {"key": "smoothing", "type": "str", "default": "0.15", "label": "Suavizado"},
-    {"key": "confidence", "type": "str", "default": "0.5", "label": "Confianza YOLO"},
-    {"key": "show_visuals", "type": "bool", "default": True, "label": "Mostrar Overlay"}
+    {"key": "roi_size", "type": "int", "default": 320, "min": 100, "max": 640, "label": "ROI Size"},
+    {"key": "smoothing", "type": "str", "default": "0.15", "label": "Smoothing"},
+    {"key": "confidence", "type": "str", "default": "0.5", "label": "YOLO Confidence"},
+    {"key": "show_visuals", "type": "bool", "default": True, "label": "Show Overlay"}
 ]
 
 _running = False
 _thread = None
-_metrics = {"fps": 0, "avg_loop_ms": 0}
 
 
 def crear_tracker():
@@ -76,11 +73,12 @@ def init_kalman():
     return kf
 
 def loop(config):
-    global _running, _metrics
+    global _running
     size = config["roi_size"]
     smoothing = float(config.get("smoothing", 0.15))
     
-    model = YOLO(config["model_name"])
+    # Forzar uso de YOLOv8 (no permitir elección por parte del usuario)
+    model = YOLO("yolov8n.pt")
     tracker = crear_tracker()
     kf = init_kalman()
     
@@ -94,8 +92,6 @@ def loop(config):
     
     tracking_active = False
     center = size // 2
-    last_time = time.time()
-    frames = 0
 
     while _running:
         start_loop = time.time()
@@ -146,12 +142,7 @@ def loop(config):
         if overlay:
             overlay.update_view(current_bbox, mode)
 
-        frames += 1
-        if (time.time() - last_time) >= 1.0:
-            _metrics["fps"] = frames
-            _metrics["avg_loop_ms"] = round((time.time() - start_loop) * 1000, 2)
-            frames = 0
-            last_time = time.time()
+        # loop timing omitted (métricas eliminadas)
 
     if overlay: overlay.close()
 
@@ -166,5 +157,4 @@ def stop():
     global _running
     _running = False
 
-def get_metrics():
-    return _metrics
+# Métricas eliminadas: ya no se expone información de rendimiento
