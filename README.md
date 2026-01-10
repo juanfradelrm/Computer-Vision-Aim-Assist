@@ -1,5 +1,5 @@
 # Computer Vision Aim Assist & Analysis System
-<img width="1024" height="1024" alt="logo (1)" src="https://github.com/user-attachments/assets/cb61780b-857e-466f-8607-9e59f6d4702c" />
+<img width="720" height="720" alt="logo (1)" src="https://github.com/user-attachments/assets/cb61780b-857e-466f-8607-9e59f6d4702c" />
 
 
 Academic research project focused on the **comparative evaluation of computer vision techniques** applied to real-time target detection and tracking in dynamic environments. The system integrates classical image processing methods, deep learning–based object detection, predictive filtering, a graphical overlay UI, and a statistics engine for quantitative analysis.
