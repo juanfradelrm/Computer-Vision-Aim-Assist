@@ -127,8 +127,8 @@ All metrics are logged for offline analysis and comparison.
 Recommended setup using **Conda**:
 
 ```bash
-conda create -n cv_aim_assist python=3.10
-conda activate cv_aim_assist
+conda create trbajo_final python=3.10
+conda activate trabajo_final
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 pip install ultralytics opencv-python numpy mss dxcam pillow
