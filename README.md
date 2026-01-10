@@ -130,7 +130,7 @@ Recommended setup using **Conda**:
 conda create trbajo_final python=3.10
 conda activate trabajo_final
 
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision torchaudio
 pip install ultralytics opencv-python numpy mss dxcam pillow
 pip install pyautogui pywin32 matplotlib pandas
 ```
